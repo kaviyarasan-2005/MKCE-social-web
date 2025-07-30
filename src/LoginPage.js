@@ -7,21 +7,27 @@ const LoginPage = () => {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  const handleLogin = () => {
-      navigate("/home");
-  };
+const handleLogin = () => {
+  if (!userId.trim()) {
+    setError("Please enter your email");
+    return;
+  }
+
+  navigate("/home", { state: { email: userId.trim() } });
+};
+
 
   return (
     <div style={styles.page}>
       <div style={styles.card}>
         <h2 style={styles.title}>MKCE Social</h2>
-        {/* <input
+        <input
           type="text"
           placeholder="Enter ID"
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
           style={styles.input}
-        /> */}
+        />
         {/* <input
           type="password"
           placeholder="Enter Password"

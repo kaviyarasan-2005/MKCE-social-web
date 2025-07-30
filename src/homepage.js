@@ -1,136 +1,172 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import io from "socket.io-client";
+import { useLocation } from "react-router-dom";
 
-/* ========== MOCK DATA ========== */
-const mockUsers = [
-  { id: 1, name: "Aishwarya" },
-  { id: 2, name: "Ravi" },
-  { id: 3, name: "Sanjay" },
-  { id: 4, name: "Meena" },
-];
+const socket = io("http://192.168.35.122:5000");
 
-const initialMessages = {
-  1: [
-    { text: "Hey there!", sender: "other" },
-    { text: "How are you?", sender: "other" },
-  ],
-  2: [
-    { text: "Hello!", sender: "other" },
-    { text: "Wanna join our study group?", sender: "other" },
-  ],
-  3: [
-    { text: "Hi!", sender: "other" },
-    { text: "Did you complete the project?", sender: "other" },
-  ],
-  4: [
-    { text: "Morning!", sender: "other" },
-    { text: "Today’s class at 10 AM", sender: "other" },
-  ],
-};
-
-/* ========== MAIN COMPONENT ========== */
 const HomePage = () => {
-  /* ---------- state ---------- */
-  const [selectedUserId, setSelectedUserId] = useState(null);
+  const navigate = useNavigate();
+  const [receiverEmail, setReceiverEmail] = useState("");
+  const [connectedEmails, setConnectedEmails] = useState([]);
+  const [selectedEmail, setSelectedEmail] = useState("");
   const [messages, setMessages] = useState(() => {
-    // pull chat history from localStorage (if any)
     const stored = localStorage.getItem("messages");
-    return stored ? JSON.parse(stored) : initialMessages;
+    return stored ? JSON.parse(stored) : {};
   });
   const [newMessage, setNewMessage] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [myEmail, setMyEmail] = useState(""); // Replace with actual login
+  const chatEndRef = useRef();
+const location = useLocation();
+useEffect(() => {
+  if (location.state?.email) {
+    setMyEmail(location.state.email);
+  }
+}, [location.state]);
 
-  /* ---------- persist to localStorage whenever messages change ---------- */
   useEffect(() => {
-    localStorage.setItem("messages", JSON.stringify(messages));
-  }, [messages]);
+    socket.emit("register", myEmail);
+  }, [myEmail]);
 
-  /* ---------- send a message ---------- */
+  // Handle incoming messages
+  useEffect(() => {
+    const handleReceive = (msg) => {
+      const { sender_email, message } = msg;
+
+      setMessages((prev) => {
+        const updated = {
+          ...prev,
+          [sender_email]: [...(prev[sender_email] || []), { text: message, sender: "other" }],
+        };
+        localStorage.setItem("messages", JSON.stringify(updated));
+        return updated;
+      });
+
+      // Add sender to connected list if not already there
+      setConnectedEmails((prev) => {
+        if (!prev.includes(sender_email)) return [...prev, sender_email];
+        return prev;
+      });
+    };
+
+    socket.on("receive_message", handleReceive);
+
+    return () => socket.off("receive_message", handleReceive);
+  }, []);
+
   const handleSend = () => {
-    if (!newMessage.trim() || selectedUserId === null) return;
+    if (!newMessage.trim() || !selectedEmail) return;
+
+    socket.emit("send_message", {
+      sender: myEmail,
+      receiver: selectedEmail,
+      message: newMessage,
+    });
 
     setMessages((prev) => {
-      const updatedUserMsgs = [...(prev[selectedUserId] || []), { text: newMessage, sender: "me" }];
-      return { ...prev, [selectedUserId]: updatedUserMsgs };
+      const updated = {
+        ...prev,
+        [selectedEmail]: [...(prev[selectedEmail] || []), { text: newMessage, sender: "me" }],
+      };
+      localStorage.setItem("messages", JSON.stringify(updated));
+      return updated;
     });
+
     setNewMessage("");
   };
 
-  /* ---------- convenience ---------- */
-  const selectedMessages = selectedUserId ? messages[selectedUserId] : [];
+  const handleStartChat = () => {
+    const email = receiverEmail.trim();
+    if (!email) return;
 
-  /* ---------- render ---------- */
-  return (
-    <div style={styles.container}>
-      {/* ===== Sidebar ===== */}
-      <div style={styles.sidebar}>
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search contacts..."
-          style={styles.searchInput}
-        />
-        <h3 style={styles.sidebarTitle}>Connected People</h3>
+    if (!connectedEmails.includes(email)) {
+      setConnectedEmails((prev) => [...prev, email]);
+    }
 
-        {mockUsers
-          .filter((u) => u.name.toLowerCase().includes(searchTerm.toLowerCase()))
-          .map((user) => (
-            <div
-              key={user.id}
-              onClick={() => setSelectedUserId(user.id)}
-              style={{
-                ...styles.userItem,
-                backgroundColor: user.id === selectedUserId ? "#dfe9ff" : "#fff",
-              }}
-            >
-              {user.name}
-            </div>
-          ))}
-      </div>
+    setSelectedEmail(email);
+    setReceiverEmail("");
+  };
 
-      {/* ===== Chat window ===== */}
-      <div style={styles.chatWindow}>
-        {selectedUserId ? (
-          <>
-            <div style={styles.chatHeader}>
-              Chat&nbsp;with&nbsp;
-              {mockUsers.find((u) => u.id === selectedUserId)?.name}
-            </div>
+  const selectedMessages = selectedEmail ? messages[selectedEmail] || [] : [];
 
-            <div style={styles.messageList}>
-              {selectedMessages.map((msg, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    ...styles.message,
-                    alignSelf: msg.sender === "me" ? "flex-end" : "flex-start",
-                    backgroundColor: msg.sender === "me" ? "#cfe9ff" : "#e6f0ff",
-                  }}
-                >
-                  {msg.text}
-                </div>
-              ))}
-            </div>
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [selectedMessages]);
 
-            <div style={styles.inputArea}>
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Type a message…"
-                style={styles.input}
-              />
-              <button onClick={handleSend} style={styles.sendButton}>
-                Send
-              </button>
-            </div>
-          </>
-        ) : (
-          <div style={styles.placeholder}>Select a person to start chatting</div>
-        )}
-      </div>
+ return (
+  <div style={styles.container}>
+    {/* Sidebar */}
+    <div style={styles.sidebar}>
+      <h3 style={styles.sidebarTitle}>Connected People</h3>
+
+      {/* Input to start new chat */}
+      <input
+        type="text"
+        placeholder="Receiver Email"
+        value={receiverEmail}
+        onChange={(e) => setReceiverEmail(e.target.value)}
+        style={styles.searchInput}
+      />
+      <button onClick={handleStartChat} style={{ ...styles.sendButton, width: "100%", marginBottom: 20 }}>
+        Start Chat
+      </button>
+
+      {connectedEmails.map((email, index) => (
+        <div
+          key={index}
+          onClick={() => setSelectedEmail(email)}
+          style={{
+            ...styles.userItem,
+            backgroundColor: selectedEmail === email ? "#dfe9ff" : "#fff",
+          }}
+        >
+          {email}
+        </div>
+      ))}
     </div>
-  );
+
+    {/* Chat Window */}
+    <div style={styles.chatWindow}>
+      {selectedEmail ? (
+        <>
+          <div style={styles.chatHeader}>Chat with {selectedEmail}</div>
+
+          <div style={styles.messageList}>
+            {selectedMessages.map((msg, idx) => (
+              <div
+                key={idx}
+                style={{
+                  ...styles.message,
+                  alignSelf: msg.sender === "me" ? "flex-end" : "flex-start",
+                  backgroundColor: msg.sender === "me" ? "#cfe9ff" : "#e6f0ff",
+                }}
+              >
+                {msg.text}
+              </div>
+            ))}
+            <div ref={chatEndRef} />
+          </div>
+
+          <div style={styles.inputArea}>
+            <input
+              type="text"
+              placeholder="Type a message…"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              style={styles.input}
+            />
+            <button onClick={handleSend} style={styles.sendButton}>
+              Send
+            </button>
+          </div>
+        </>
+      ) : (
+        <div style={styles.placeholder}>Select a user or start a chat to begin messaging</div>
+      )}
+    </div>
+  </div>
+);
+
 };
 
 /* ========== STYLES ========== */
@@ -140,8 +176,6 @@ const styles = {
     height: "100vh",
     fontFamily: "'Segoe UI', sans-serif",
   },
-
-  /* -- sidebar -- */
   sidebar: {
     width: "250px",
     backgroundColor: "#f0f4ff",
@@ -165,8 +199,6 @@ const styles = {
     cursor: "pointer",
     transition: "0.2s",
   },
-
-  /* -- chat pane -- */
   chatWindow: {
     flex: 1,
     display: "flex",
@@ -192,8 +224,6 @@ const styles = {
     borderRadius: "15px",
     maxWidth: "60%",
   },
-
-  /* -- input area -- */
   inputArea: {
     display: "flex",
     borderTop: "1px solid #ddd",
@@ -216,8 +246,6 @@ const styles = {
     borderRadius: "8px",
     cursor: "pointer",
   },
-
-  /* -- placeholder -- */
   placeholder: {
     margin: "auto",
     fontSize: "18px",
