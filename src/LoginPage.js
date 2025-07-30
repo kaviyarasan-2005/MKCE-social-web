@@ -8,24 +8,20 @@ const LoginPage = () => {
   const navigate = useNavigate();
 
   const handleLogin = () => {
-    if (userId === "29") {
       navigate("/home");
-    } else {
-      setError("Invalid ID or Password");
-    }
   };
 
   return (
     <div style={styles.page}>
       <div style={styles.card}>
-        <h2 style={styles.title}>Student Chat Login</h2>
-        <input
+        <h2 style={styles.title}>MKCE Social</h2>
+        {/* <input
           type="text"
           placeholder="Enter ID"
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
           style={styles.input}
-        />
+        /> */}
         {/* <input
           type="password"
           placeholder="Enter Password"
